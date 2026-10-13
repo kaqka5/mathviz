@@ -13,7 +13,7 @@
   var STORE_KEY = 'mathviz.ai.settings';
 
   var PRESETS = [
-    { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+    { id: 'deepseek', name: 'DeepSeek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-flash' },
     { id: 'openai', name: 'OpenAI', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini' },
     { id: 'moonshot', name: '月之暗面 Kimi', baseUrl: 'https://api.moonshot.cn/v1', model: 'moonshot-v1-8k' },
     { id: 'dashscope', name: '阿里通义千问', baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1', model: 'qwen-plus' },
@@ -98,7 +98,8 @@
 
   /* ---------------- 设置读写 ---------------- */
   function loadSettings() {
-    var s = { preset: 'deepseek', baseUrl: PRESETS[0].baseUrl, model: PRESETS[0].model, apiKey: '', temperature: 0.6 };
+    // 默认不发送 temperature：部分模型（推理类）不接受该参数，模型自带采样已足够随机
+    var s = { preset: 'deepseek', baseUrl: PRESETS[0].baseUrl, model: PRESETS[0].model, apiKey: '' };
     try {
       var raw = global.localStorage && global.localStorage.getItem(STORE_KEY);
       if (raw) s = Object.assign(s, JSON.parse(raw));
@@ -167,9 +168,9 @@
         { role: 'user', content: solving ? buildSolvePrompt(opts.problem) : buildPrompt(opts) }
       ]
     };
-    // 推理类模型（deepseek-reasoner / *-thinking 等）不接受 temperature
-    if (!/reasoner|reasoning|thinking|o1|o3|r1/i.test(model)) {
-      body.temperature = s.temperature === undefined ? 0.6 : s.temperature;
+    // temperature 只在明确设置时才发送（推理类模型不接受该参数）
+    if (typeof s.temperature === 'number' && !/reasoner|reasoning|thinking|o1|o3|r1/i.test(model)) {
+      body.temperature = s.temperature;
     }
     var headers = { 'Content-Type': 'application/json' };
     if (s.apiKey) headers.Authorization = 'Bearer ' + s.apiKey;
