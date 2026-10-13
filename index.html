@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>数学题图解工坊 · AI 出题 / 解题 / 实时作图</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">∑</div>
+    <div>
+      <h1>数学题图解工坊</h1>
+      <p class="sub">AI 出题 · 解题过程可选显示 · 关键式子自动提取成 2D/3D 图形，参数与角度实时可调</p>
+    </div>
+  </div>
+  <nav class="tabs">
+    <button class="tab active" data-mode="ai">🤖 AI 出题</button>
+    <button class="tab" data-mode="gen">题库生成</button>
+    <button class="tab" data-mode="custom">自定义题目</button>
+  </nav>
+</header>
+
+<main class="layout">
+  <!-- ================= 左侧控制面板 ================= -->
+  <aside class="panel">
+    <!-- AI 出题 -->
+    <section id="paneAI" class="pane">
+      <label class="field-label" for="aiTopic">知识点 / 题型</label>
+      <input id="aiTopic" class="input" placeholder="例如：解三角形、导数与单调性、直线与圆、椭圆">
+      <div class="examples">
+        <span class="chip ai-chip" data-topic="解三角形（两边及夹角）">解三角形</span>
+        <span class="chip ai-chip" data-topic="三次函数的导数、单调区间与极值">导数与极值</span>
+        <span class="chip ai-chip" data-topic="直线与圆的位置关系、弦长">直线与圆</span>
+        <span class="chip ai-chip" data-topic="椭圆的标准方程、焦点与离心率">椭圆</span>
+        <span class="chip ai-chip" data-topic="正方体中异面直线所成的角">立体几何</span>
+        <span class="chip ai-chip" data-topic="圆锥的侧面积、表面积与体积">圆锥</span>
+        <span class="chip ai-chip" data-topic="正弦型函数的振幅、周期与单调区间">三角函数图像</span>
+      </div>
+
+      <label class="field-label" for="aiDiff">难度</label>
+      <select id="aiDiff" class="select">
+        <option>基础</option>
+        <option selected>中等</option>
+        <option>较难</option>
+        <option>竞赛拓展</option>
+      </select>
+
+      <label class="field-label" for="aiExtra">额外要求（可留空）</label>
+      <textarea id="aiExtra" class="textarea" rows="2" placeholder="例如：数字用整数；要考二面角；步骤写得详细一点"></textarea>
+
+      <button id="aiGenBtn" class="btn primary block">⚡ 用 AI 生成题目并作图</button>
+
+      <div class="row gap wrap" style="margin-top:8px">
+        <button id="aiCopyBtn" class="btn tiny">📋 复制提示词（免密钥）</button>
+        <button id="aiPasteToggle" class="btn tiny">📥 粘贴 AI 回答</button>
+        <button id="aiDemoBtn" class="btn tiny">🎬 看示例</button>
+      </div>
+
+      <div id="aiPasteWrap" class="hidden" style="margin-top:9px">
+        <textarea id="aiPasteBox" class="textarea" rows="6" placeholder="把 AI 的回答（Markdown + LaTeX）整段粘贴到这里，点下面的按钮解析"></textarea>
+        <button id="aiParseBtn" class="btn primary block">🔍 解析并自动作图</button>
+      </div>
+
+      <div id="aiStatus" class="parse-msg"></div>
+
+      <details id="aiSettings" class="settings">
+        <summary>AI 接口设置（自带密钥，可跳过）</summary>
+        <p class="hint">密钥只保存在你自己的浏览器里，直接发给你选择的 AI 服务商，本站不经过任何中间服务器。</p>
+        <label class="field-label" for="aiPreset">服务商</label>
+        <select id="aiPreset" class="select"></select>
+        <label class="field-label" for="aiBase">API 地址</label>
+        <input id="aiBase" class="input" placeholder="https://api.deepseek.com/v1">
+        <label class="field-label" for="aiKey">API Key</label>
+        <input id="aiKey" class="input" type="password" placeholder="sk-...">
+        <label class="field-label" for="aiModel">模型名</label>
+        <input id="aiModel" class="input" placeholder="deepseek-chat">
+        <button id="aiSave" class="btn tiny block">保存设置</button>
+        <p class="hint">若浏览器直连被跨域拦截，请改用「复制提示词 → 粘贴 AI 回答」的方式，效果完全一样。</p>
+      </details>
+    </section>
+
+    <!-- 题库生成 -->
+    <section id="paneGen" class="pane hidden">
+      <label class="field-label" for="catSel">题目类型</label>
+      <select id="catSel" class="select"></select>
+      <div id="genList" class="gen-list"></div>
+      <button id="rerollBtn" class="btn primary block">🎲 换一题（重新随机）</button>
+    </section>
+
+    <!-- 自定义题目 -->
+    <section id="paneCustom" class="pane hidden">
+      <label class="field-label" for="customInput">把题目粘贴进来</label>
+      <textarea id="customInput" class="textarea" rows="5"
+        placeholder="例如：在△ABC中，AB=5，AC=7，∠A=60°，求BC的长和三角形的面积。&#10;或者：y = 2sin(x) + 1&#10;或者：椭圆 x^2/25+y^2/9=1&#10;或者：正方体棱长为3，求体对角线&#10;或者：圆 x^2+y^2=25 与直线 y=2x+1"></textarea>
+      <div class="examples">
+        <span class="chip" data-ex="在△ABC中，AB=5，AC=7，∠A=60°，求BC与面积">三角形(两边夹角)</span>
+        <span class="chip" data-ex="△ABC的三边为 a=3，b=4，c=5，求最大角与面积">三角形(三边)</span>
+        <span class="chip" data-ex="y = 2sin(x) + 1">三角函数</span>
+        <span class="chip" data-ex="y = x^2 - 2x - 3">二次函数</span>
+        <span class="chip" data-ex="椭圆 x^2/25+y^2/9=1">椭圆</span>
+        <span class="chip" data-ex="双曲线 x^2/16-y^2/9=1">双曲线</span>
+        <span class="chip" data-ex="抛物线 y^2=8x">抛物线</span>
+        <span class="chip" data-ex="r = 3cos(3theta)">极坐标玫瑰线</span>
+        <span class="chip" data-ex="圆 x^2+y^2=25 与直线 y=2x+1">直线与圆</span>
+        <span class="chip" data-ex="正方体棱长为3">正方体</span>
+        <span class="chip" data-ex="正四棱锥底面边长4，侧面与底面所成角60°">正四棱锥</span>
+        <span class="chip" data-ex="圆锥底面半径2，高5">圆锥</span>
+      </div>
+      <button id="parseBtn" class="btn primary block">📐 生成图形 / 解题</button>
+      <div id="parseMsg" class="parse-msg"></div>
+    </section>
+
+    <hr class="hr">
+
+    <!-- 显示选项 -->
+    <section>
+      <span class="field-label">解题过程 / 答案</span>
+      <label class="check"><input type="checkbox" id="chkSteps"> 显示解题过程</label>
+      <label class="check"><input type="checkbox" id="chkAnswer"> 显示答案</label>
+      <div class="row gap wrap">
+        <button id="revealBtn" class="btn tiny">逐步展开</button>
+        <button id="revealAll" class="btn tiny">全部展开</button>
+        <button id="revealNone" class="btn tiny">全部收起</button>
+      </div>
+      <p class="hint" id="viewHint">每个图形卡片下方都有自己的参数滑块；拖动图形可平移 / 旋转，滚轮缩放，双击重置。</p>
+    </section>
+  </aside>
+
+  <!-- ================= 右侧内容 ================= -->
+  <section class="content">
+    <article class="card">
+      <div class="card-head">
+        <h2 id="probTitle">题目</h2>
+        <span class="badge" id="probTag"></span>
+      </div>
+      <div id="statement" class="statement"></div>
+      <div id="answerBox" class="answer hidden"></div>
+      <div class="steps-head">
+        <button id="stepsToggle" class="btn ghost small">▸ 显示解题过程</button>
+        <span class="muted" id="stepsCount"></span>
+      </div>
+      <ol id="steps" class="steps hidden"></ol>
+    </article>
+
+    <article class="card figure-card">
+      <div class="card-head">
+        <h2>关键式子的图形（实时联动）</h2>
+        <span class="badge soft">可拖动 / 滚轮 / 滑块</span>
+      </div>
+      <div id="figures"></div>
+      <div id="figEmpty" class="fig-empty hidden">暂无图形</div>
+    </article>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>纯前端离线运行：数学表达式解析、解三角形、立体几何消隐、3D 投影、LaTeX 公式与图形提取全部由本站自己的代码实现；只有「AI 出题」会把提示词发给你自己配置的 AI 服务商。</span>
+</footer>
+
+<script src="js/math/expr.js"></script>
+<script src="js/math/geom.js"></script>
+<script src="js/ui/mathfmt.js"></script>
+<script src="js/ui/markdown.js"></script>
+<script src="js/render/plot2d.js"></script>
+<script src="js/render/plot3d.js"></script>
+<script src="js/scenes/solid3d.js"></script>
+<script src="js/scenes/geometry2d.js"></script>
+<script src="js/scenes/graph2d.js"></script>
+<script src="js/scenes/conic2d.js"></script>
+<script src="js/generators/helpers.js"></script>
+<script src="js/generators/triangles.js"></script>
+<script src="js/generators/functions.js"></script>
+<script src="js/generators/conics.js"></script>
+<script src="js/generators/analytic.js"></script>
+<script src="js/generators/solids.js"></script>
+<script src="js/generators/vectors.js"></script>
+<script src="js/generators/index.js"></script>
+<script src="js/parse/nlp.js"></script>
+<script src="js/ai/latex.js"></script>
+<script src="js/ai/extract.js"></script>
+<script src="js/ai/client.js"></script>
+<script src="js/ai/samples.js"></script>
+<script src="js/ui/app.js"></script>
+</body>
+</html>
