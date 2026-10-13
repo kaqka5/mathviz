@@ -26,6 +26,11 @@
     var m = line.match(/^\s*#{1,6}\s*(.+?)\s*$/) || line.match(/^\s*\*\*(.+?)\*\*\s*[:：]?\s*$/);
     if (!m) return null;
     var t = m[1].replace(/[:：]\s*$/, '');
+    // 「第 5 步：得出结论」这类步骤标题要先识别出来，
+    // 否则会因为含“结论/结果”被误判成答案小节，导致最后一步丢失
+    if (/^第\s*[0-9一二三四五六七八九十]+\s*步/.test(t) || /^步骤\s*[0-9]/.test(t) || /^[0-9]+[.)、]/.test(t)) {
+      return { kind: 'sub', title: t };
+    }
     if (/答案|结论|最终结果|结果/.test(t)) return { kind: 'answer', title: t };
     if (/题目|问题|题干|已知条件/.test(t)) return { kind: 'statement', title: t };
     if (/解答|解析|解题|过程|步骤|证明|分析/.test(t)) return { kind: 'solution', title: t };

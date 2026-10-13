@@ -116,6 +116,11 @@ body {
 .btn:hover { border-color: #b9cdf3; background: #f7faff; }
 .btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
 .btn.primary:hover { background: #1b45bf; }
+.btn.ai-solve {
+  background: linear-gradient(135deg, #6d28d9, #2563eb);
+  border-color: #5b21b6; color: #fff;
+}
+.btn.ai-solve:hover { filter: brightness(1.08); }
 .btn.block { display: block; width: 100%; margin-top: 10px; }
 .btn.tiny { padding: 4px 9px; font-size: 12.5px; border-radius: 8px; font-weight: 600; }
 .btn.small { padding: 6px 11px; font-size: 13px; }

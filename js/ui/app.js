@@ -301,6 +301,65 @@
     fig.canvas.addEventListener('dblclick', function () { resetView(fig); });
   }
 
+  /* ============ 自定义题目 → 让 AI 解题 ============ */
+  function customText() {
+    return ($('customInput').value || '').trim();
+  }
+  function copySolvePrompt(showPaste) {
+    var text = customText();
+    var msg = $('parseMsg');
+    if (!text) { msg.className = 'parse-msg error'; msg.textContent = '请先把题目粘到上面的框里。'; return; }
+    if (showPaste) $('aiSolvePasteWrap').classList.remove('hidden');
+    var full = MV.AIClient.buildFullSolvePrompt(text);
+    function done(okFlag) {
+      msg.className = 'parse-msg' + (okFlag ? '' : ' error');
+      msg.innerHTML = okFlag
+        ? '✅ 已复制「<b>解题提示词</b>」（里面已经包含你刚输入的题目）。<br>' +
+          '把它贴到任意 AI（DeepSeek / ChatGPT / Kimi 网页版）→ 再把 AI 的完整回答粘到下面的框里 → 点「🔍 解析并自动作图」。'
+        : '复制失败，请手动复制下面的提示词：<textarea class="textarea" rows="6">' + esc(full) + '</textarea>';
+    }
+    if (global.navigator && global.navigator.clipboard) {
+      global.navigator.clipboard.writeText(full).then(function () { done(true); }, function () { done(false); });
+    } else done(false);
+  }
+
+  function aiSolveCustom() {
+    var text = customText();
+    var msg = $('parseMsg');
+    if (!text) { msg.className = 'parse-msg error'; msg.textContent = '请先把题目粘到上面的框里。'; return; }
+    var s = MV.AIClient.loadSettings();
+    if (!s.apiKey && !/localhost|127\.0\.0\.1/.test(s.baseUrl)) {
+      // 没配密钥 → 走免密钥：复制解题提示词 + 打开粘贴框
+      copySolvePrompt(true);
+      return;
+    }
+    if (state.aiBusy) return;
+    state.aiBusy = true;
+    var btn = $('aiSolveBtn'), old = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ AI 正在解题…';
+    msg.className = 'parse-msg';
+    msg.textContent = '正在把题目发给 ' + s.baseUrl + ' …';
+    MV.AIClient.callAI({ mode: 'solve', problem: text, settings: s })
+      .then(function (r) {
+        $('aiSolvePasteBox').value = r.text;
+        msg.textContent = 'AI 已返回解答，正在提取关键式子并作图…';
+        loadAIAnswer(r.text, {
+          keepPane: true, originalText: text, title: 'AI 解题',
+          statusEl: 'parseMsg'
+        });
+      })
+      .catch(function (e) {
+        msg.className = 'parse-msg error';
+        msg.textContent = '❌ ' + (e.message || String(e)) + '（也可以点「📋 复制解题提示词」走免密钥方式）';
+      })
+      .then(function () {
+        state.aiBusy = false;
+        btn.disabled = false;
+        btn.textContent = old;
+      });
+  }
+
   /* ==================== 三种模式的载入 ==================== */
   function loadGen(id) {
     var gen = MV.Generators.byId[id];
@@ -361,26 +420,32 @@
     return true;
   }
 
-  /* 把 AI 返回的解答变成题目 + 若干可调图形 */
+  /* 把 AI 返回的解答变成题目 + 若干可调图形
+   * opts: { title, keepPane, originalText, statusEl } */
   function loadAIAnswer(text, opts) {
     opts = opts || {};
     var res = MV.AIExtract.parse(text, { maxFigures: opts.maxFigures || 6 });
-    var status = $('aiStatus');
+    var status = $(opts.statusEl || 'aiStatus');
     if (!res.ok || (!res.statement && !res.steps.length)) {
       status.className = 'parse-msg error';
       status.textContent = res.message || '没能从这段内容里解析出题目。';
       return false;
     }
-    state.mode = 'ai';
+    if (!opts.keepPane) state.mode = 'ai';
     state.problem = {
       title: opts.title || 'AI 生成题目',
-      tag: 'AI 出题',
+      tag: opts.originalText ? 'AI 解题' : 'AI 出题',
       notice: '',
       params: [],
       build: null
     };
     clearFigures();
-    updateProblemCard({ statement: res.statement, steps: res.steps, answer: res.answer });
+    updateProblemCard({
+      quote: opts.originalText || '',
+      statement: res.statement,
+      steps: res.steps,
+      answer: res.answer
+    });
     state.revealed = state.showSteps ? res.steps.length : 0;
     renderSteps(res.steps);
 
@@ -403,7 +468,7 @@
     status.className = 'parse-msg';
     status.innerHTML = '✅ 已解析：题目 1 道、步骤 ' + res.steps.length + ' 步、可调图形 <b>' + res.figures.length +
       '</b> 个。<br><span class="muted">' + esc(res.log.join('；')) + '</span>';
-    setMode('ai');
+    if (!opts.keepPane) setMode('ai');
     return true;
   }
 
@@ -583,6 +648,18 @@
       if (!t.trim()) { $('parseMsg').className = 'parse-msg error'; $('parseMsg').textContent = '请先输入题目内容。'; return; }
       loadCustom(t);
     });
+    $('aiSolveBtn').addEventListener('click', aiSolveCustom);
+    $('aiSolveCopy').addEventListener('click', function () { copySolvePrompt(true); });
+    $('aiSolvePaste').addEventListener('click', function () {
+      $('aiSolvePasteWrap').classList.toggle('hidden');
+    });
+    $('aiSolveParse').addEventListener('click', function () {
+      var t = $('aiSolvePasteBox').value;
+      if (!t.trim()) { $('parseMsg').className = 'parse-msg error'; $('parseMsg').textContent = '请先把 AI 的解答粘贴进来。'; return; }
+      loadAIAnswer(t, {
+        keepPane: true, originalText: customText(), title: 'AI 解题', statusEl: 'parseMsg'
+      });
+    });
     document.querySelectorAll('.chip').forEach(function (c) {
       c.addEventListener('click', function () {
         $('customInput').value = c.dataset.ex;
@@ -649,6 +726,15 @@
       setMode('ai');
       $('aiPasteBox').value = MV.AISamples.all[q.aiDemo];
       loadAIAnswer(MV.AISamples.all[q.aiDemo], { title: '示例：' + MV.AISamples.names[q.aiDemo] });
+    } else if (q.solve) {
+      // 分享/验证用：?solve=<AI 的解答>&orig=<自己输入的题目>
+      setMode('custom');
+      if (q.orig) $('customInput').value = q.orig;
+      $('aiSolvePasteBox').value = q.solve;
+      $('aiSolvePasteWrap').classList.remove('hidden');
+      loadAIAnswer(q.solve, {
+        keepPane: true, originalText: q.orig || '', title: 'AI 解题', statusEl: 'parseMsg'
+      });
     } else if (q.ai) {
       setMode('ai');
       $('aiPasteBox').value = q.ai;

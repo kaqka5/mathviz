@@ -491,6 +491,22 @@ const rj = MV.AIExtract.parse(jsonAns);
 ok(rj.ok && rj.steps.length === 1 && rj.figures.length === 1, 'JSON 结构的返回', 'figs=' + rj.figures.length);
 ok(!MV.AIExtract.parse('').ok, '空内容返回失败');
 
+// 步骤标题里带「结论」等词时不能被当成答案小节（否则最后一步会丢）
+const solveSample = [
+  '### 题目', '求函数 $y=x^{3}-3x+1$ 在闭区间 $[-2,2]$ 上的最大值与最小值。', '',
+  '### 解答',
+  '#### 第 1 步：求导函数', '$$y\'=3x^{2}-3=3(x-1)(x+1)$$', '',
+  '#### 第 2 步：求驻点', '令 $y\'=0$，得 $x_1=-1$，$x_2=1$。', '',
+  '#### 第 3 步：比较函数值', '$y(-2)=-1$，$y(-1)=3$。', '',
+  '#### 第 4 步：得出结论', '四个候选值中最大的是 $3$，最小的是 $-1$。', '',
+  '### 答案', '最大值 $3$，最小值 $-1$。'
+].join('\n');
+const rs = MV.AIExtract.parse(solveSample);
+ok(rs.steps.length === 4, '步骤标题含「结论」也保留为步骤', 'steps=' + rs.steps.length);
+ok(rs.answer.indexOf('四个候选值') < 0 && rs.answer.indexOf('最大值') >= 0, '答案段落没被步骤正文污染', rs.answer);
+ok(rs.steps[3] && rs.steps[3].title.indexOf('得出结论') > 0, '最后一步标题正确', rs.steps[3] ? rs.steps[3].title : '');
+ok(rs.figures.length >= 1, '该样例仍能提取出函数图像', 'figs=' + rs.figures.length);
+
 /* ---------------- 11. Markdown 渲染 ---------------- */
 section('Markdown 渲染');
 const md = MV.MD.render('### 标题\n\n- 第一项\n- 第二项\n\n**重点** 与 $x^2$ 与 `code`\n\n1. 甲\n2. 乙');
@@ -579,6 +595,28 @@ async function aiAsyncTests() {
   // 端到端：把 AI 返回的内容喂给提取器
   const e2e = MV.AIExtract.parse(MV.AISamples.all.triangle);
   ok(e2e.figures.length === 1 && e2e.steps.length === 3, '端到端：AI 文本 → 题目 + 可调图形');
+
+  // 解题模式：把用户自己的题目交给 AI
+  let capSolve = null;
+  await MV.AIClient.callAI({
+    mode: 'solve', problem: '已知正方体 ABCD-A1B1C1D1 棱长为 2，求体对角线长',
+    settings: { baseUrl: 'https://api.deepseek.com/v1', apiKey: 'sk-test', model: 'deepseek-chat' },
+    fetch: (url, init) => {
+      capSolve = { url, init };
+      return mockResponse(200, JSON.stringify({ choices: [{ message: { content: '### 题目\n正方体…' } }] }));
+    }
+  });
+  const sbody = JSON.parse(capSolve.init.body);
+  ok(/解这道题/.test(sbody.messages[0].content), '解题模式：system 用「解这道题」提示词');
+  ok(sbody.messages[1].content.indexOf('棱长为 2') > 0, '解题模式：用户消息里带上题目原文');
+  ok(sbody.messages[1].content.indexOf('题目开始') > 0 && sbody.messages[1].content.indexOf('题目结束') > 0, '解题模式：题目被明确分隔');
+  ok(MV.AIClient.buildFullSolvePrompt('测试题').indexOf('```figures') > 0, '解题提示词同样要求 figures 代码块');
+  ok(MV.AIClient.buildFullSolvePrompt('测试题').indexOf('不要改题目') > 0, '解题提示词要求不许改题');
+  let msgNoProb = '';
+  try {
+    await MV.AIClient.callAI({ mode: 'solve', problem: '   ', settings: { baseUrl: 'https://api.deepseek.com/v1', apiKey: 'k' } });
+  } catch (e) { msgNoProb = e.message; }
+  ok(/题目/.test(msgNoProb), '解题模式没给题目时给出提示', msgNoProb);
 
   MV.AIClient.saveSettings({ preset: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o-mini', apiKey: 'sk-1' });
   const back = MV.AIClient.loadSettings();

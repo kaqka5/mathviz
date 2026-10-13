@@ -108,7 +108,16 @@
         <span class="chip" data-ex="正四棱锥底面边长4，侧面与底面所成角60°">正四棱锥</span>
         <span class="chip" data-ex="圆锥底面半径2，高5">圆锥</span>
       </div>
-      <button id="parseBtn" class="btn primary block">📐 生成图形 / 解题</button>
+      <button id="parseBtn" class="btn primary block">📐 本地识别作图（离线、免费）</button>
+      <button id="aiSolveBtn" class="btn block ai-solve">🤖 让 AI 解这道题 → 出过程 + 答案 + 图形</button>
+      <div class="row gap wrap" style="margin-top:7px">
+        <button id="aiSolveCopy" class="btn tiny">📋 复制解题提示词（免密钥）</button>
+        <button id="aiSolvePaste" class="btn tiny">📥 粘贴 AI 解答</button>
+      </div>
+      <div id="aiSolvePasteWrap" class="hidden" style="margin-top:8px">
+        <textarea id="aiSolvePasteBox" class="textarea" rows="6" placeholder="把 AI 对这道题的解答（Markdown + LaTeX）整段粘贴到这里"></textarea>
+        <button id="aiSolveParse" class="btn primary block">🔍 解析并自动作图</button>
+      </div>
       <div id="parseMsg" class="parse-msg"></div>
     </section>
 
