@@ -24,6 +24,9 @@
     rightarrow: '→', to: '→', Rightarrow: '⇒', leftarrow: '←',
     leftrightarrow: '↔', therefore: '∴', because: '∵', odot: '⊙',
     circ: '°', degree: '°', prime: '′', quad: ' ', qquad: '  ',
+    int: '∫', iint: '∬', iiint: '∭', oint: '∮', partial: '∂',
+    sum: '∑', prod: '∏', mid: '|', lvert: '|', rvert: '|', lVert: '‖', rVert: '‖',
+    '|': '|', '%': '%',
     ',': ' ', ';': ' ', '!': '', ' ': ' '
   };
   var FUNCS = {

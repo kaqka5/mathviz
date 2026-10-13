@@ -770,15 +770,36 @@
   }
 
   /* ---------------- 总入口 ---------------- */
+  function tryRegion(s, raw) {
+    return MV.RegionParser ? MV.RegionParser.try(s, raw) : null;
+  }
+
   function parse(text) {
     var raw = String(text || '').trim();
     if (!raw) return { ok: false, message: '请输入题目内容。' };
-    var s = normalize(raw);
-    var fns = [trySolid, tryTriangle, tryCircleLine, tryConic, tryFunction];
-    for (var i = 0; i < fns.length; i++) {
-      var r = null;
-      try { r = fns[i](s, raw); } catch (e) { r = null; }
-      if (r && r.ok) return r;
+
+    // 依次尝试：原文 → 数学块转换后的文本 → 整体 LaTeX 转换后的文本
+    // （这样直接粘贴 LaTeX 公式也能识别）
+    var variants = [normalize(raw)];
+    if (MV.Latex) {
+      try {
+        var v2 = normalize(MV.Latex.textWithMathPlain(raw));
+        if (v2 && variants.indexOf(v2) < 0) variants.push(v2);
+      } catch (e) { }
+      try {
+        var v3 = normalize(MV.Latex.tex(raw, 'plain'));
+        if (v3 && variants.indexOf(v3) < 0) variants.push(v3);
+      } catch (e) { }
+    }
+
+    var fns = [tryRegion, trySolid, tryTriangle, tryCircleLine, tryConic, tryFunction];
+    for (var vi = 0; vi < variants.length; vi++) {
+      var s = variants[vi];
+      for (var i = 0; i < fns.length; i++) {
+        var r = null;
+        try { r = fns[i](s, raw); } catch (e) { r = null; }
+        if (r && r.ok) return r;
+      }
     }
     return {
       ok: false,
@@ -788,7 +809,9 @@
         '· 函数：y = 2sin(x) 或 y = x^2 - 2x + 1\n' +
         '· 极坐标：r = 3cos(3theta)\n' +
         '· 直线与圆：圆 x^2+y^2=25 与直线 y=2x+1\n' +
-        '· 立体：正方体棱长为3、正四棱锥底面边长4，侧面与底面所成角60°、圆柱底面半径2高5、球半径3'
+        '· 圆锥曲线：椭圆 x^2/25+y^2/9=1、双曲线 x^2/16-y^2/9=1、抛物线 y^2=8x\n' +
+        '· 立体：正方体棱长为3、正四棱锥底面边长4，侧面与底面所成角60°、圆柱底面半径2高5、球半径3\n' +
+        '· 二重积分：D={(x,y)||x|+|y|≤1}，I₁=∬_D (2x²+tan(xy²))dxdy …'
     };
   }
 

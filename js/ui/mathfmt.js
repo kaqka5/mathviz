@@ -21,6 +21,7 @@
     sin: 'sin', cos: 'cos', tan: 'tan', cot: 'cot', sec: 'sec', csc: 'csc',
     arcsin: 'arcsin', arccos: 'arccos', arctan: 'arctan',
     log: 'log', ln: 'ln', lg: 'lg', lim: 'lim', max: 'max', min: 'min',
+    int: '∫', iint: '∬', iiint: '∭', oint: '∮', partial: '∂', sum: '∑', prod: '∏',
     quad: '\u2003', qquad: '\u2003\u2003', ';': '\u2009', ',': '\u2009', ' ': ' ', '!': ''
   };
 

@@ -23,10 +23,10 @@ function load(rel) {
 const FILES = [
   'js/math/expr.js', 'js/math/geom.js', 'js/ui/mathfmt.js', 'js/ui/markdown.js',
   'js/render/plot2d.js', 'js/render/plot3d.js',
-  'js/scenes/solid3d.js', 'js/scenes/geometry2d.js', 'js/scenes/graph2d.js', 'js/scenes/conic2d.js',
+  'js/scenes/solid3d.js', 'js/scenes/geometry2d.js', 'js/scenes/graph2d.js', 'js/scenes/conic2d.js', 'js/scenes/region2d.js',
   'js/generators/helpers.js', 'js/generators/triangles.js', 'js/generators/functions.js',
   'js/generators/conics.js', 'js/generators/analytic.js', 'js/generators/solids.js',
-  'js/generators/vectors.js', 'js/generators/index.js', 'js/parse/nlp.js',
+  'js/generators/vectors.js', 'js/generators/index.js', 'js/parse/nlp.js', 'js/parse/region.js',
   'js/ai/latex.js', 'js/ai/extract.js', 'js/ai/client.js', 'js/ai/samples.js'
 ];
 FILES.forEach(load);
@@ -290,7 +290,9 @@ const customCases = [
   ['圆柱底面半径2，高5，求侧面积和体积', 'solid', 'solid_cylinder'],
   ['圆锥底面半径3，高4', 'solid', 'solid_cone'],
   ['球半径2，求表面积与体积', 'solid', 'solid_sphere'],
-  ['正四面体棱长为6', 'solid', 'solid_tetra']
+  ['正四面体棱长为6', 'solid', 'solid_tetra'],
+  ['D={(x,y)||x|+|y|≤1}，I_1 = ∬_D (2x^2+tan(xy^2))dxdy，I_2 = ∬_D (x^2y+2tan(y^2))dxdy，I_3 = ∬_D (|xy|+y^2)dxdy，'
+    + '(A) I_3>I_2>I_1  (B) I_1>I_2>I_3  (C) I_2>I_1>I_3  (D) I_3>I_1>I_2', 'region', null]
 ];
 let customOk = 0;
 customCases.forEach(([text, kind, genId]) => {
@@ -319,6 +321,57 @@ customCases.forEach(([text, kind, genId]) => {
 ok(customOk === customCases.length, '全部自定义样例识别成功', customOk + '/' + customCases.length);
 const bad = MV.CustomParser.parse('今天天气不错');
 ok(!bad.ok && typeof bad.message === 'string', '无效输入返回友好提示');
+
+/* ---------------- 7.5 二重积分（平面区域） ---------------- */
+section('二重积分 · 平面区域');
+// 直接用 LaTeX 原文（很多人是从题库复制过来的）
+const INTEGRAL_LATEX = [
+  '已知平面域 $D=\\{(x,y)\\,|\\,|x|+|y|\\le 1\\}$，记',
+  '$$I_1=\\iint_D (2x^{2}+\\tan(xy^{2}))\\,dx\\,dy,\\quad I_2=\\iint_D (x^{2}y+2\\tan y^{2})\\,dx\\,dy,\\quad I_3=\\iint_D (|xy|+y^{2})\\,dx\\,dy$$',
+  '则 (A) $I_3>I_2>I_1$  (B) $I_1>I_2>I_3$  (C) $I_2>I_1>I_3$  (D) $I_3>I_1>I_2$'
+].join('\n');
+const ip = MV.CustomParser.parse(INTEGRAL_LATEX);
+ok(ip.ok && ip.kind === 'region', 'LaTeX 原文能识别为二重积分题', ip.message || '');
+if (ip.ok) {
+  const vals = {}; ip.params.forEach(p => { vals[p.key] = p.value; });
+  const res = ip.build(vals);
+  const val = {};
+  (res.readouts || []).forEach(r => {
+    const m = r.label.match(/^(I\d)\b/);
+    if (m) val[m[1]] = parseFloat(r.value);
+  });
+  // 精确值：I1 = 2∬x² = 2/3，I3 = ∬|xy| + ∬y² = 1/6 + 1/3 = 1/2
+  near(val.I1, 2 / 3, 5e-3, 'I₁ ≈ 2/3（对称性 + 数值积分）');
+  near(val.I3, 0.5, 5e-3, 'I₃ ≈ 1/2');
+  ok(val.I2 > val.I1 && val.I1 > val.I3, '大小关系 I₂ > I₁ > I₃', JSON.stringify(val));
+  ok(/\(C\)/.test(res.answer) && /C/.test(String(res.readouts.filter(r => r.label === '匹配选项')[0].value)),
+    '自动匹配到选项 (C)', res.answer);
+  ok(res.steps.length >= 4, '给出分步解答', 'steps=' + res.steps.length);
+  try { renderScene(res.scene); ok(true, '区域图形可渲染'); }
+  catch (e) { ok(false, '区域图形渲染失败', e.message); }
+}
+// 其他区域类型
+const regionCases = [
+  ['D={(x,y)|x^2+y^2≤4}，I_1=∬_D (x^2+y^2)dxdy', 'disk'],
+  ['D={(x,y)|x^2/4+y^2/9≤1}，I_1=∬_D (x^2+y^2)dxdy', 'ellipse'],
+  ['D={(x,y)|0≤x≤1,0≤y≤2}，I_1=∬_D (x+y)dxdy', 'rect']
+];
+regionCases.forEach(([t, type]) => {
+  const p = MV.CustomParser.parse(t);
+  ok(p.ok && p.kind === 'region', '区域类型识别：' + type, p.message || '');
+  if (!p.ok) return;
+  const v = {}; p.params.forEach(q => { v[q.key] = q.value; });
+  const r = p.build(v);
+  ok(r.scene && r.scene.items.length > 0, '区域图形有内容：' + type);
+  renderScene(r.scene);
+});
+// 圆盘上的解析核对：∬(x²+y²) over x²+y²≤4 = πR⁴/2 = 8π
+const diskProb = MV.CustomParser.parse('D={(x,y)|x^2+y^2≤4}，I_1=∬_D (x^2+y^2)dxdy');
+if (diskProb.ok) {
+  const r = diskProb.build({ R: 2 });
+  const v = parseFloat(r.readouts.filter(x => /^I1/.test(x.label))[0].value);
+  near(v, 8 * Math.PI, 0.05, '圆盘上 ∬(x²+y²) = πR⁴/2 = 8π');
+}
 
 /* ---------------- 8. 数值一致性抽查 ---------------- */
 section('解三角形一致性抽查');
