@@ -69,6 +69,45 @@
     return function (x, y) { return MV.Expr.evaluate(ast, { x: x, y: y }); };
   }
 
+  /* 把被积函数按加减号拆成若干「项」：奇偶性必须逐项判断 */
+  function astStr(node) {
+    if (!node) return '?';
+    switch (node.t) {
+      case 'num': return String(node.v);
+      case 'var': return node.name;
+      case 'neg': return '-' + astStr(node.v);
+      case 'call': return node.name + '(' + node.args.map(astStr).join(', ') + ')';
+      case 'bin':
+        var l = astStr(node.l), r = astStr(node.r);
+        if (node.op === '+' || node.op === '-') return l + ' ' + node.op + ' ' + r;
+        if (node.op === '*') {
+          if (/[+\-]/.test(l)) l = '(' + l + ')';
+          if (/[+\-]/.test(r)) r = '(' + r + ')';
+          return l + r;
+        }
+        if (node.op === '^') return l + '^' + r;
+        return l + ' ' + node.op + ' ' + r;
+    }
+    return '?';
+  }
+  function termsOf(src) {
+    var code = absify(src), ast;
+    try { ast = MV.Expr.parse(code); } catch (e) { return null; }
+    var out = [];
+    (function walk(node, sign) {
+      if (node.t === 'bin' && node.op === '+') { walk(node.l, sign); walk(node.r, sign); return; }
+      if (node.t === 'bin' && node.op === '-') { walk(node.l, sign); walk(node.r, -sign); return; }
+      out.push({
+        sign: sign,
+        str: (sign < 0 ? '-' : '') + prettyDisp(astStr(node)),
+        fn: (function (nd, sg) {
+          return function (x, y) { return sg * MV.Expr.evaluate(nd, { x: x, y: y }); };
+        })(node, sign)
+      });
+    })(ast, 1);
+    return out;
+  }
+
   /* ---------------- 识别区域 D ---------------- */
   function parseRegion(s) {
     var m;
@@ -139,7 +178,7 @@
     var options = parseOptions(s);
 
     var integrands = integrals.map(function (it) {
-      return { label: it.label, tex: it.tex, plain: it.plain, fn: fn2(it.integrand) };
+      return { label: it.label, tex: it.tex, plain: it.plain, machine: it.integrand, fn: fn2(it.integrand) };
     });
     if (!integrands.some(function (i) { return i.fn; })) return null;
 
@@ -177,9 +216,13 @@
         integrands.forEach(function (it) {
           if (!it.fn) { parts.push({ label: it.label, value: NaN, sym: {}, tex: it.tex, plain: it.plain }); return; }
           var r = MV.Region2D.integrate(it.fn, reg, { rows: 220, scan: 96 });
+          var terms = termsOf(it.machine);
+          if (terms) {
+            terms.forEach(function (t) { t.sym = MV.Region2D.symmetry(t.fn, reg); });
+          }
           parts.push({
             label: it.label, value: r.value, tex: it.tex, plain: it.plain,
-            sym: MV.Region2D.symmetry(it.fn, reg)
+            terms: terms, sym: MV.Region2D.symmetry(it.fn, reg)
           });
         });
         var ok = parts.filter(function (p) { return Number.isFinite(p.value); });
@@ -233,16 +276,25 @@
             '对称性正是解决这类比较题的关键。'
         });
         steps.push({
-          title: '第 2 步：用奇偶性消去会变成 0 的项',
-          body: '在关于原点对称的区域上：被积函数关于 $x$（或 $y$）是**奇函数** ⟹ 二重积分为 $0$；是偶函数则可以先化成第一象限的 4 倍。' +
-            '程序对每个被积函数做了数值奇偶性检验：\n' +
+          title: '第 2 步：逐项用奇偶性，把会变成 0 的项划掉',
+          body: '区域 $D$ 关于 $x$ 轴、$y$ 轴都对称，所以在它上面，被积函数中关于 $x$（或 $y$）为**奇函数**的项，二重积分一定是 $0$。' +
+            '注意必须**逐项**判断 —— 一个和式整体看往往既不奇也不偶：\n' +
             parts.map(function (p) {
-              var tags = [];
-              if (p.sym.oddInX) tags.push('关于 $x$ 为奇函数 ⟹ 这一项积分为 0');
-              if (p.sym.oddInY) tags.push('关于 $y$ 为奇函数 ⟹ 这一项积分为 0');
-              if (!tags.length) tags.push('没有可消去的奇函数项（全是偶函数）');
-              return '$' + p.label + ' = ' + p.tex + '$：' + tags.join('，');
-            }).join('\n')
+              if (!p.terms || !p.terms.length) return '';
+              var kept = [], killed = [];
+              p.terms.forEach(function (t) {
+                if (t.sym.oddInX) killed.push(t.str + '（关于 $x$ 为奇函数）');
+                else if (t.sym.oddInY) killed.push(t.str + '（关于 $y$ 为奇函数）');
+                else kept.push(t.str);
+              });
+              var line = '$' + p.label + ' = ' + p.tex + '$：';
+              if (killed.length) line += '其中 ' + killed.join('、') + '的积分为 $0$，直接消去；';
+              else line += '各项都不是奇函数，消不掉；';
+              line += kept.length
+                ? '剩下 $' + kept.join(' + ') + '$ 需要算。'
+                : '于是 $' + p.label + ' = 0$。';
+              return line;
+            }).filter(Boolean).join('\n')
         });
         steps.push({
           title: '第 3 步：把剩下的积分算出来（数值验证）',
