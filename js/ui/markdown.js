@@ -2,7 +2,9 @@
  * mathviz/js/ui/markdown.js
  * 轻量 Markdown 渲染（给 AI 返回的解答用）：
  * 标题 / 粗体 / 行内代码 / 有序无序列表 / 引用 / 分割线 / 代码块，
- * 其中的 $...$ 公式交给 MV.Fmt 处理
+ * 其中的公式交给 MV.Fmt 处理。
+ * 关键点：跨多行的 $$...$$（或 \[...\]）公式块必须先整体抽出来，
+ * 否则逐行处理会把 $$ 和公式源码当普通文字显示出来。
  * ============================================================ */
 (function (global) {
   'use strict';
@@ -25,12 +27,38 @@
     return html;
   }
 
+  var PH = '\u0001M';   // 公式块占位符前缀
+
+  /* 公式块渲染：保留公式里原有的换行（AI 常把推导写成多行） */
+  function mathHtml(body) {
+    return MV.Fmt.render(body).replace(/\n/g, '<br>');
+  }
+
   function render(text) {
-    var lines = String(text == null ? '' : text).replace(/\r\n?/g, '\n').split('\n');
+    var s = String(text == null ? '' : text).replace(/\r\n?/g, '\n');
+
+    /* ---------- 1) 先把跨行的公式块整体抽出来 ---------- */
+    var blocks = [];
+    function stash(body) {
+      blocks.push(String(body).trim());
+      return PH + (blocks.length - 1) + '\u0001';
+    }
+    s = s.replace(/\$\$([\s\S]+?)\$\$/g, function (_, b) { return stash(b); });
+    s = s.replace(/\\\[([\s\S]+?)\\\]/g, function (_, b) { return stash(b); });
+
+    var lines = s.split('\n');
     var out = [], para = [], list = null, quote = [], inCode = false, codeBuf = [];
 
     function flushPara() {
-      if (para.length) { out.push('<p>' + para.map(inline).join('<br>') + '</p>'); para = []; }
+      if (para.length) {
+        out.push('<p>' + para.map(function (l) {
+          var t = l.trim();
+          var only = t.match(/^\u0001M(\d+)\u0001$/);
+          if (only) return '<span class="mathblock">' + mathHtml(blocks[+only[1]]) + '</span>';
+          return inline(l);
+        }).join('<br>') + '</p>');
+        para = [];
+      }
     }
     function flushList() {
       if (list) {
@@ -44,6 +72,14 @@
     function flushAll() { flushPara(); flushList(); flushQuote(); }
 
     lines.forEach(function (line) {
+      // 整行就是一个公式块占位符 → 单独成块的居中公式
+      var only = line.trim().match(/^\u0001M(\d+)\u0001$/);
+      if (only) {
+        flushAll();
+        out.push('<div class="mathblock">' + mathHtml(blocks[+only[1]]) + '</div>');
+        return;
+      }
+
       if (/^\s*```/.test(line)) {
         if (inCode) {
           out.push('<pre class="codeblock">' + esc(codeBuf.join('\n')) + '</pre>');
@@ -84,7 +120,11 @@
     });
     if (inCode && codeBuf.length) out.push('<pre class="codeblock">' + esc(codeBuf.join('\n')) + '</pre>');
     flushAll();
-    return out.join('\n');
+
+    /* ---------- 2) 行内残留的公式占位符换成行内公式 ---------- */
+    return out.join('\n').replace(/\u0001M(\d+)\u0001/g, function (_, i) {
+      return '<span class="mathblock">' + mathHtml(blocks[+i]) + '</span>';
+    });
   }
 
   MV.MD = { render: render, inline: inline, esc: esc };

@@ -519,6 +519,32 @@ ok(md.indexOf('<code>code</code>') >= 0, 'Markdown 行内代码');
 ok(MV.MD.render('a < b & c').indexOf('&lt;') >= 0, 'Markdown 转义');
 ok(MV.MD.render('$$x^2+y^2=1$$').indexOf('mathblock') >= 0, 'Markdown 独立公式');
 
+// 跨多行的 $$ 公式块（AI 最常见的写法）——以前会被当成普通文字显示成 $$ 和 \frac
+const multiLine = [
+  '因为',
+  '$$',
+  '\\sin\\frac{2\\pi}{3}=\\frac{\\sqrt{3}}{2},',
+  '=',
+  '\\left(\\frac{\\pi}{3}-\\frac12\\right)',
+  '$$',
+  '所以 $\\int_{\\frac{\\pi}{6}}^{\\frac{\\pi}{3}}\\sin^2 t\\,\\mathrm{d}t=\\frac{\\pi}{12}$。'
+].join('\n');
+const hm = MV.MD.render(multiLine);
+ok(hm.indexOf('$$') < 0, '多行 $$ 不再原样显示');
+ok(hm.indexOf('\\frac') < 0 && hm.indexOf('\\left') < 0, '多行公式里的 LaTeX 命令不再外露');
+ok((hm.match(/class="mathblock"/g) || []).length === 1, '多行 $$ 生成 1 个块级公式',
+  'blocks=' + (hm.match(/class="mathblock"/g) || []).length);
+ok(hm.indexOf('class="math"') > 0, '行内 $...$ 仍是行内公式');
+ok(hm.indexOf('class="frac"') > 0 && hm.indexOf('radical') > 0, '分数与根号正常渲染');
+ok(hm.indexOf('∫') > 0, '行内积分号渲染');
+ok(hm.indexOf('<br>') > 0, '公式块保留原有换行');
+ok(hm.indexOf('因为') > 0 && hm.indexOf('所以') > 0, '中文说明保留');
+
+// 没写 $ 的裸 LaTeX 也要能渲染
+ok(MV.MD.render('由 \\frac{a}{b} 得').indexOf('class="frac"') > 0, '裸 LaTeX（文本里）按公式渲染');
+ok(MV.Fmt.inline('\\sqrt{3}').indexOf('radical') > 0, '裸 LaTeX（行内）按公式渲染');
+ok(MV.MD.render('\\[x^2+y^2=1\\]').indexOf('mathblock') > 0, '\\[...\\] 公式块也支持');
+
 /* ---------------- 12. AI 客户端（模拟接口） ---------------- */
 section('AI 客户端');
 sandbox.localStorage = {

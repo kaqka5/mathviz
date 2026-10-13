@@ -172,19 +172,23 @@
       .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
   }
 
-  /* 行内混排：普通文字 + $公式$ / $$公式$$，文字里 **加粗** 会变成 <b> */
+  /* 行内混排：普通文字 + $公式$ / $$公式$$，文字里 **加粗** 会变成 <b>
+   * 另外：文字里若夹了没写 $ 的 LaTeX（AI 经常这样），也直接按公式排版 */
+  function textChunk(t) {
+    if (/\\[a-zA-Z]{2,}|\^\{|_\{/.test(t)) return render(t);
+    return esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  }
   function inline(src) {
     var s = String(src == null ? '' : src);
     var out = '', last = 0, m;
     var re = /\$\$([\s\S]+?)\$\$|\$([^$\n]+?)\$/g;
-    function text(t) { return esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); }
     while ((m = re.exec(s)) !== null) {
-      out += text(s.slice(last, m.index));
+      out += textChunk(s.slice(last, m.index));
       if (m[1] !== undefined) out += '<span class="mathblock">' + render(m[1]) + '</span>';
       else out += '<span class="math">' + render(m[2]) + '</span>';
       last = re.lastIndex;
     }
-    out += text(s.slice(last));
+    out += textChunk(s.slice(last));
     return out;
   }
 
